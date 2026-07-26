@@ -34,3 +34,14 @@ Temporary Items
 *.icloud
 
 # End of https://www.toptal.com/developers/gitignore/api/macos
+
+### Project ###
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# Cookbook photographs — never commit page images
+samples/
+# Extraction results
+out/
