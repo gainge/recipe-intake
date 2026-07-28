@@ -1,0 +1,26 @@
+[Unit]
+Description=recipe-intake API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=recipe-intake
+Group=recipe-intake
+WorkingDirectory=/srv/recipe-intake
+EnvironmentFile=/etc/recipe-intake/env
+ExecStart=/srv/recipe-intake/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8420
+
+# One worker. The process is I/O-bound and shares a 1GB box with other tenants;
+# more workers would mean more SQLite writers for no throughput gain.
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/recipe-intake/data
+
+[Install]
+WantedBy=multi-user.target

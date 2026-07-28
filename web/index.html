@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111417">
+  <title>Recipe Intake</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- Token gate. Shown until a token is in sessionStorage. -->
+<section id="gate" class="panel">
+  <h1>Recipe Intake</h1>
+  <p class="muted">Enter the access token for this server.</p>
+  <form id="gate-form">
+    <input id="token-input" type="password" inputmode="text" autocomplete="off"
+           placeholder="access token" required>
+    <button type="submit">Unlock</button>
+  </form>
+  <p id="gate-error" class="error" hidden></p>
+</section>
+
+<!-- Capture. -->
+<main id="app" hidden>
+  <header>
+    <input id="book-title" type="text" placeholder="Book title (optional)" autocomplete="off">
+    <button id="sign-out" class="link" type="button">Sign out</button>
+  </header>
+
+  <div id="viewfinder">
+    <video id="preview" playsinline muted autoplay></video>
+    <p id="camera-error" class="error" hidden></p>
+    <!-- Fallback for browsers where getUserMedia is unavailable or refused. -->
+    <label id="file-fallback" class="fallback" hidden>
+      Take a photo
+      <input id="file-input" type="file" accept="image/*" capture="environment" multiple hidden>
+    </label>
+  </div>
+
+  <div id="filmstrip" class="filmstrip" hidden></div>
+
+  <div class="controls">
+    <button id="shutter" type="button" class="shutter" aria-label="Capture page"></button>
+    <div class="control-side">
+      <input id="hint" type="text" placeholder="Recipe title (if page has two)" autocomplete="off">
+      <button id="submit" type="button" disabled>Extract <span id="page-count"></span></button>
+      <button id="discard" type="button" class="link" disabled>Discard pages</button>
+    </div>
+  </div>
+
+  <section id="queue" class="queue"></section>
+</main>
+
+<script src="/capture.js"></script>
+</body>
+</html>

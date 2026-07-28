@@ -7,7 +7,7 @@ already extracted.
 
 import pytest
 
-from normalize import merge_curated, normalize, parse_amount, parse_duration, parse_servings
+from app.extraction.normalize import merge_curated, normalize, parse_amount, parse_duration, parse_servings
 
 
 @pytest.mark.parametrize(

@@ -26,8 +26,6 @@ improved parser can be re-run across every page already extracted.
 from __future__ import annotations
 
 import argparse
-import base64
-import io
 import json
 import sys
 import time
@@ -35,83 +33,32 @@ from pathlib import Path
 
 import anthropic
 from dotenv import load_dotenv
-from PIL import Image, ImageOps
 
-import validate
-from normalize import merge_curated, normalize
-from prompt import SYSTEM_PROMPT, user_instruction
-from schema import Recipe
+# Run as a script, so sys.path[0] is spike/ rather than the repo root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.extraction import (  # noqa: E402
+    MAX_EDGE,
+    QUALITY,
+    SYSTEM_PROMPT,
+    Recipe,
+    estimate_cost,
+    merge_curated,
+    normalize,
+    prepare_image,
+    user_instruction,
+    validate,
+)
+from app.extraction.client import PRICING, build_content  # noqa: E402
 
 load_dotenv()
 
-# USD per million tokens: (input, output).
-PRICING: dict[str, tuple[float, float]] = {
-    "claude-opus-5": (5.00, 25.00),
-    "claude-sonnet-5": (2.00, 10.00),  # introductory rate through 2026-08-31; list is 3.00 / 15.00
-    "claude-haiku-4-5": (1.00, 5.00),
-}
-
 DEFAULT_MODEL = "claude-sonnet-5"
-DEFAULT_MAX_EDGE = 2000
-DEFAULT_QUALITY = 80
 MAX_TOKENS = 16_000
 
-
-def prepare_image(path: Path, max_edge: int, quality: int) -> tuple[bytes, tuple[int, int], tuple[int, int]]:
-    """Downscale and re-encode, mirroring what the PWA will do before upload.
-
-    Testing against the original 12MP file would flatter the results and
-    misprice them, since production never sends that.
-    """
-    with Image.open(path) as img:
-        # Phone photos carry rotation in EXIF. Without this the model is handed
-        # a sideways page and quietly does much worse.
-        img = ImageOps.exif_transpose(img)
-        original = img.size
-        img = img.convert("RGB")
-
-        scale = max_edge / max(img.size)
-        if scale < 1:
-            img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
-        sent = img.size
-
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=quality, optimize=True)
-
-    return buf.getvalue(), original, sent
-
-
-def estimate_cost(model: str, usage) -> float | None:
-    rates = PRICING.get(model)
-    if rates is None:
-        return None
-    in_rate, out_rate = rates
-
-    fresh = getattr(usage, "input_tokens", 0) or 0
-    cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
-    cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
-    output = getattr(usage, "output_tokens", 0) or 0
-
-    # Cache reads bill at ~0.1x input, writes at ~1.25x.
-    return (
-        fresh * in_rate + cache_read * in_rate * 0.1 + cache_write * in_rate * 1.25 + output * out_rate
-    ) / 1_000_000
-
-
-def build_content(images: list[bytes], hint: str) -> list[dict]:
-    blocks: list[dict] = [
-        {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/jpeg",
-                "data": base64.standard_b64encode(data).decode(),
-            },
-        }
-        for data in images
-    ]
-    blocks.append({"type": "text", "text": user_instruction(hint)})
-    return blocks
+# Image preparation, pricing, and the request shape all live in app/extraction/,
+# shared with the server. If the CLI had its own copies, the quality and cost
+# measured here would stop describing what production actually sends.
 
 
 def derive(recipe: dict, previous: dict | None = None) -> tuple[dict, dict]:
@@ -237,8 +184,13 @@ def main() -> int:
     parser.add_argument("--hint", default="", help="Title of the recipe to extract, when a page holds more than one")
     parser.add_argument("--replay", action="store_true", help="re-run normalization and validation over saved JSON; no API call")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"default: {DEFAULT_MODEL}")
-    parser.add_argument("--max-edge", type=int, default=DEFAULT_MAX_EDGE, help=f"long-edge px before upload (default: {DEFAULT_MAX_EDGE})")
-    parser.add_argument("--quality", type=int, default=DEFAULT_QUALITY, help=f"JPEG quality (default: {DEFAULT_QUALITY})")
+    parser.add_argument(
+        "--no-thinking",
+        action="store_true",
+        help="disable extended thinking; results save under a .nothink suffix so they can be diffed",
+    )
+    parser.add_argument("--max-edge", type=int, default=MAX_EDGE, help=f"long-edge px before upload (default: {MAX_EDGE})")
+    parser.add_argument("--quality", type=int, default=QUALITY, help=f"JPEG quality (default: {QUALITY})")
     parser.add_argument("--out", type=Path, default=Path("out"), help="directory for JSON results (default: out/)")
     parser.add_argument("--verbose", action="store_true", help="print the full parse and transcription")
     args = parser.parse_args()
@@ -251,7 +203,7 @@ def main() -> int:
     if args.replay:
         return replay(args.paths, args.verbose)
 
-    print(f"model: {args.model}")
+    print(f"model: {args.model}{' (thinking disabled)' if args.no_thinking else ''}")
     images: list[bytes] = []
     for path in args.paths:
         data, original, sent = prepare_image(path, args.max_edge, args.quality)
@@ -281,6 +233,7 @@ def main() -> int:
             ],
             messages=[{"role": "user", "content": build_content(images, args.hint)}],
             output_format=Recipe,
+            **({"thinking": {"type": "disabled"}} if args.no_thinking else {}),
         )
     except anthropic.APIStatusError as exc:
         print(f"\nAPI error {exc.status_code}: {exc.message}", file=sys.stderr)
@@ -330,10 +283,12 @@ def main() -> int:
 
     args.out.mkdir(parents=True, exist_ok=True)
     stem = args.paths[0].stem
-    dest = args.out / f"{stem}.{args.model}.json"
+    variant = ".nothink" if args.no_thinking else ""
+    dest = args.out / f"{stem}.{args.model}{variant}.json"
     payload = {
         "source_images": [str(p) for p in args.paths],
         "model": args.model,
+        "thinking": "disabled" if args.no_thinking else "adaptive",
         "max_edge": args.max_edge,
         "elapsed_seconds": round(elapsed, 2),
         "estimated_cost_usd": round(cost, 6) if cost is not None else None,

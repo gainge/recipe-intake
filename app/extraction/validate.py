@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-from normalize import parse_amount, parse_duration, parse_servings
+from .normalize import parse_amount, parse_duration, parse_servings
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 _STOPWORDS = frozenset(

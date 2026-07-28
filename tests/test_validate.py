@@ -5,7 +5,7 @@ learns to skim it — and the review step is the only thing standing between a
 misread fraction and a wrong dish. Half of these tests assert silence.
 """
 
-import validate
+from app.extraction import validate
 from tests.test_normalize import _ingredient, _recipe
 
 

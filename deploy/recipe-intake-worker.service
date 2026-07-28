@@ -1,0 +1,26 @@
+[Unit]
+Description=recipe-intake extraction worker
+After=network-online.target recipe-intake-api.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=recipe-intake
+Group=recipe-intake
+WorkingDirectory=/srv/recipe-intake
+EnvironmentFile=/etc/recipe-intake/env
+ExecStart=/srv/recipe-intake/.venv/bin/python -m app.worker
+
+# Jobs left `running` by a kill mid-extraction are requeued at startup, so a
+# restart costs at most one repeated API call rather than a stuck queue.
+Restart=always
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/recipe-intake/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+# The repo root is the import root; `app` and `tests` are plain packages rather
+# than an installed distribution. Nothing here is published, so packaging it
+# would only add a build step between an edit and a test run.
+pythonpath = ["."]
+testpaths = ["tests"]
