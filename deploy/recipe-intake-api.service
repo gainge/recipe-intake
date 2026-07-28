@@ -9,7 +9,7 @@ User=recipe-intake
 Group=recipe-intake
 WorkingDirectory=/srv/recipe-intake
 EnvironmentFile=/etc/recipe-intake/env
-ExecStart=/srv/recipe-intake/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8420
+ExecStart=/srv/recipe-intake/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8420 --proxy-headers --forwarded-allow-ips=127.0.0.1
 
 # One worker. The process is I/O-bound and shares a 1GB box with other tenants;
 # more workers would mean more SQLite writers for no throughput gain.
